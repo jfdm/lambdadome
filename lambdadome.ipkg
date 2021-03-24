@@ -41,6 +41,7 @@ modules =
         , Lambda.Classic
         , Lambda.Classic.Bool
         , Lambda.Classic.Default
+        , Lambda.Classic.Default.Param
         , Lambda.Classic.Vect
 
         -- [ The NewWave ]

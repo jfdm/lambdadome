@@ -1,7 +1,7 @@
 ||| A Default Calculus in which some arguments are presented with default values.
 |||
 ||| Compile Time Safe and Runtime Unsafe
-module Lambda.Classic.Default
+module Lambda.Classic.Default.Param
 
 import Decidable.Equality
 
@@ -18,9 +18,8 @@ import Lambda.Common
 
 namespace Types
   public export
-  data Ty =  TyNat
-           | TyFunc  Ty Ty
-           | TyFuncD Ty Ty
+  data Ty = TyParam Nat | TyNat | TyFunc Ty Ty
+
 
 namespace Terms
   public export
@@ -37,41 +36,59 @@ namespace Terms
        -> (arg  : Term ctxt         p)
                -> Term ctxt           r
 
-    FunD : (type_param : Ty)
-        -> (def        : Term  ctxt    type_param)
-        -> (body       : Term (ctxt += type_param) type_ret)
-                      -> Term  ctxt (TyFuncD type_param type_ret)
+    AppDef : {n : Nat}
+          -> {r  : Ty}
+          -> (func : Term ctxt (TyFunc (TyParam n) r))
+                  -> Term ctxt                     r
 
-    AppDef : {param,r : Ty}
-          -> (func : Term ctxt (TyFuncD param r))
-                  -> Term ctxt                r
-
-    AppOver : {param,r : Ty}
-           -> (func    : Term ctxt (TyFuncD param r))
-           -> (arg     : Term ctxt          param   )
-                      -> Term ctxt                r
+    AppOver : {n,m : Nat}
+           -> {r   : Ty}
+           -> (fun : Term ctxt (TyFunc (TyParam n) r))
+           -> (arg : Term ctxt         (TyParam m))
+                  -> Term ctxt                     r
 
     MkNat : (n : Nat)
               -> Term ctxt TyNat
+
+    ToNat : {n : Nat}
+              -> Term ctxt (TyParam n)
+              -> Term ctxt TyNat
+
+    MkParam : (n : Nat)
+                -> Term ctxt (TyParam n)
+
+    -- The trick and only appears at runtime or as args in AppOver
+    Override : (n : Nat)
+                 -> Term ctxt (TyParam m)
 
 
   namespace Undecorated
 
     public export
     data AST = Var String
-             | Fun  String Ty AST
-             | FunD String Ty AST AST
+             | Fun String Ty AST
              | App AST AST
              | MkNat Nat
+             | ToNat AST
+             | MkParam Nat
              | AppDef AST
+             | AppOver AST AST
 
 namespace Types
 
+  pNotN : TyParam k === TyNat -> Void
+  pNotN Refl impossible
+
+  pIdx : (contra : i === k -> Void)
+      -> TyParam i === TyParam k
+      -> Void
+  pIdx contra Refl = contra Refl
+
+  pNotFunc : TyParam i === TyFunc p r -> Void
+  pNotFunc Refl impossible
+
   nNotF : TyNat === TyFunc p r -> Void
   nNotF Refl impossible
-
-  nNotFd : TyNat === TyFuncD p r -> Void
-  nNotFd Refl impossible
 
   fP : (contra : a === b -> Void)
     -> TyFunc a y === TyFunc b w
@@ -83,28 +100,24 @@ namespace Types
     -> Void
   fR contra Refl = contra Refl
 
-  fdP : (contra : a === b -> Void)
-     -> TyFuncD a y === TyFuncD b w
-     -> Void
-  fdP contra Refl = contra Refl
-
-  fdR : (contra : y === w -> Void)
-     -> TyFuncD a y === TyFuncD a w
-     -> Void
-  fdR contra Refl = contra Refl
-
-  fNotD : TyFunc x y === TyFuncD a b
-       -> Void
-  fNotD Refl impossible
-
   export
   DecEq Ty where
+    decEq (TyParam k) (TyParam j) with (decEq k j)
+      decEq (TyParam k) (TyParam k) | (Yes Refl) = Yes Refl
+      decEq (TyParam k) (TyParam j) | (No contra)
+        = No (pIdx contra)
+
+    decEq (TyParam k) TyNat = No pNotN
+
+    decEq (TyParam k) (TyFunc x y)
+      = No pNotFunc
+
+    decEq TyNat (TyParam k) = No (negEqSym pNotN)
     decEq TyNat TyNat = Yes Refl
-    decEq TyNat (TyFunc  x y) = No nNotF
-    decEq TyNat (TyFuncD x y) = No nNotFd
 
-    decEq (TyFunc x y) (TyFuncD a b) = No fNotD
+    decEq TyNat (TyFunc x y) = No nNotF
 
+    decEq (TyFunc x y) (TyParam k) = No (negEqSym pNotFunc)
     decEq (TyFunc x y) TyNat = No (negEqSym nNotF)
 
     decEq (TyFunc x y) (TyFunc z w) with (decEq x z)
@@ -116,17 +129,6 @@ namespace Types
       decEq (TyFunc x y) (TyFunc z w) | (No contra)
         = No (fP contra)
 
-    decEq (TyFuncD x y) TyNat = No (negEqSym nNotFd)
-    decEq (TyFuncD x y) (TyFunc a b) = No (negEqSym fNotD)
-
-    decEq (TyFuncD x y) (TyFuncD z w) with (decEq x z)
-      decEq (TyFuncD x y) (TyFuncD x w) | (Yes Refl) with (decEq y w)
-        decEq (TyFuncD x w) (TyFuncD x w) | (Yes Refl) | (Yes Refl)
-          = Yes Refl
-        decEq (TyFuncD x y) (TyFuncD x w) | (Yes Refl) | (No contra)
-          = No (fdR contra)
-      decEq (TyFuncD x y) (TyFuncD z w) | (No contra)
-        = No (fdP contra)
 
 namespace TypeChecking
   namespace Env
@@ -179,18 +181,6 @@ namespace TypeChecking
       check env (Fun name type body) | (Just (MkDPair fst snd))
         = Just (_ ** Fun type snd)
 
-    check env (FunD name type def body) with (check env def)
-      check env (FunD name type def body) | Nothing
-        = Nothing
-      check env (FunD name type def body) | (Just (MkDPair fst def')) with (decEq type fst)
-        check env (FunD name fst def body) | (Just (MkDPair fst def')) | (Yes Refl) with (check (extend name fst env) body)
-          check env (FunD name fst def body) | (Just (MkDPair fst def')) | (Yes Refl) | Nothing
-            = Nothing
-          check env (FunD name fst def body) | (Just (MkDPair fst def')) | (Yes Refl) | (Just (MkDPair x body'))
-            = Just (_ ** FunD fst def' body')
-        check env (FunD name type def body) | (Just (MkDPair fst def')) | (No contra)
-          = Nothing
-
     check env (App x y) with (check env x)
       check env (App x y) | Nothing
         = Nothing
@@ -203,33 +193,51 @@ namespace TypeChecking
             = Just (_ ** App f a)
           check env (App x y) | (Just (MkDPair (TyFunc paramTy returnTy) f)) | (Just (MkDPair paramTy' a)) | (No contra)
             = Nothing
-
-      check env (App x y) | (Just (MkDPair (TyFuncD paramTy returnTy) f)) with (check env y)
-        check env (App x y) | (Just (MkDPair (TyFuncD paramTy returnTy) f)) | Nothing
-          = Nothing
-        check env (App x y) | (Just (MkDPair (TyFuncD paramTy returnTy) f)) | (Just (MkDPair paramTy' a)) with (decEq paramTy paramTy')
-          check env (App x y) | (Just (MkDPair (TyFuncD paramTy' returnTy) f)) | (Just (MkDPair paramTy' a)) | (Yes Refl)
-            = Just (_ ** AppOver f a)
-          check env (App x y) | (Just (MkDPair (TyFuncD paramTy returnTy) f)) | (Just (MkDPair paramTy' a)) | (No contra)
-            = Nothing
-
       check env (App x y) | (Just (MkDPair _ snd))
         = Nothing
 
     check env (MkNat k)
       = Just (_ ** MkNat k)
 
+    check env (ToNat x) with (check env x)
+      check env (ToNat x) | Nothing
+        = Nothing
+      check env (ToNat x) | (Just (MkDPair (TyParam k) snd))
+        = Just ( _ ** ToNat snd)
+      check env (ToNat x) | (Just (MkDPair _ snd))
+        = Nothing
+
     -- 'Typing Rule'/'Rewrite' to insert
     check env (AppDef f) with (check env f)
       check env (AppDef f) | Nothing
         = Nothing
-      check env (AppDef f) | (Just (MkDPair (TyFuncD k y) snd))
+      check env (AppDef f) | (Just (MkDPair (TyFunc (TyParam k) y) snd))
         = Just (_ ** AppDef snd)
+
+        -- Just (_ ** App snd (MkParam k))
 
       check env (AppDef f) | (Just (MkDPair (TyFunc _ y) snd))
         = Nothing
       check env (AppDef f) | (Just (MkDPair _ snd))
         = Nothing
+
+    check env (AppOver forig aorig) with (check env forig)
+      check env (AppOver forig aorig) | Nothing
+        = Nothing
+      check env (AppOver forig aorig) | (Just (MkDPair (TyFunc (TyParam n) r) f)) with (check env aorig)
+        check env (AppOver forig aorig) | (Just (MkDPair (TyFunc (TyParam n) r) f)) | Nothing
+          = Nothing
+        check env (AppOver forig aorig) | (Just (MkDPair (TyFunc (TyParam n) r) f)) | (Just (MkDPair (TyParam m) a))
+          = Just (_ ** AppOver f a)
+        check env (AppOver forig aorig) | (Just (MkDPair (TyFunc (TyParam n) r) f)) | (Just (MkDPair _ _))
+          = Nothing
+
+      check env (AppOver forig aorig) | (Just (MkDPair _ _))
+        = Nothing
+
+    check env (MkParam n)
+      = Just (_ ** MkParam n)
+
 
 namespace Renaming
 
@@ -258,10 +266,6 @@ namespace Renaming
   rename f (App func param)
     = App (rename f func) (rename f param)
 
-  rename f (FunD ty def body)
-    = FunD ty (rename         f  def)
-              (rename (weaken f) body)
-
   rename f (AppDef func)
     = AppDef (rename f func)
 
@@ -270,6 +274,15 @@ namespace Renaming
 
   rename f (MkNat n)
     = MkNat n
+
+  rename f (ToNat p)
+    = ToNat (rename f p)
+
+  rename f (MkParam n)
+    = MkParam n
+
+  rename f (Override n)
+    = Override n
 
 namespace Substitution
   public export
@@ -302,19 +315,23 @@ namespace Substitution
     subst f (App func var)
       = App (subst f func) (subst f var)
 
-    subst f (FunD type def body)
-      = FunD type
-             (subst          f  def)
-             (subst (weakens f) body)
-
     subst f (AppDef func)
       = AppDef (subst f func)
+
+    subst f (AppOver func arg)
+      = AppOver (subst f func) (subst f arg)
 
     subst f (MkNat n)
       = MkNat n
 
-    subst f (AppOver func var)
-      = AppOver (subst f func) (subst f var)
+    subst f (ToNat m)
+      = ToNat (subst f m)
+
+    subst f (MkParam n)
+      = MkParam n
+
+    subst f (Override m)
+      = Override m
 
 
   namespace Single
@@ -344,10 +361,9 @@ namespace Values
     Fun : {body : Term (ctxt += type) bodyTy}
                 -> Value (Fun type body)
 
-    FunD : {body : Term (ctxt += type) bodyTy}
-                -> Value (FunD type def body)
-
     MkNat : Value (MkNat n)
+    MkParam : Value (MkParam n)
+    Override : Value (Override m)
 
 namespace Reduction
 
@@ -375,19 +391,31 @@ namespace Reduction
                             -> Redux (App (Fun type body) var)
                                      (Single.subst var body)
 
-      SimplifyAppOver : Redux this that
-                     -> Redux (AppOver this var) (AppOver that var)
-
-      RewriteAppOver : Redux (AppOver (FunD type def body) var)
-                             (App (Fun type body) var)
-
-
       SimplifyAppDef : Redux this that
                     -> Redux (AppDef this) (AppDef that)
 
-      RewriteAppDef : Redux (AppDef (FunD type def body))
-                            (App (Fun type body) def)
+      RewriteAppDef : Redux (AppDef (Fun (TyParam n) body))
+                            (App (Fun (TyParam n) body) (MkParam n))
 
+      SimplifyAppOverFunc : Redux this that
+                         -> Redux (AppOver this arg)
+                                  (AppOver that arg)
+
+      SimplifyAppOverArg : Value func
+                        -> Redux this that
+                        -> Redux (AppOver func this) (AppOver func that)
+
+      ReduceFuncAppOverP : Redux (AppOver (Fun (TyParam a) body) (MkParam m))
+                                 (Single.subst (Override {m=a} m) body)
+
+      ReduceFuncAppOverO : Redux (AppOver (Fun (TyParam n) body) (Override m))
+                                 (Single.subst (Override m) body)
+
+      SimplifyToNat : Redux this that
+                   -> Redux (ToNat this) (ToNat that)
+
+      ReduceToNatP : Redux (ToNat (MkParam  p)) (MkNat p)
+      ReduceToNatO : Redux (ToNat (Override p)) (MkNat p)
 
 namespace Progress
   public export
@@ -408,8 +436,7 @@ namespace Progress
   -- Term
   progress {type} (Var _) impossible
 
-  progress (Fun  type     body) = Done Fun
-  progress (FunD type def body) = Done FunD
+  progress (Fun type body) = Done Fun
 
   progress (App func var) with (progress func)
     progress (App func var) | (Done prfF) with (progress var)
@@ -421,20 +448,38 @@ namespace Progress
       = Step (SimplifyFuncAppFunc prfF)
 
   progress (AppDef func) with (progress func)
-    progress (AppDef (FunD ty def body)) | (Done FunD)
+    progress (AppDef (Fun (TyParam n) body)) | (Done Fun)
       = Step RewriteAppDef
 
     progress (AppDef func) | (Step step)
       = Step (SimplifyAppDef step)
 
-  progress (AppOver func var) with (progress func)
-    progress (AppOver (FunD ty def body) var) | (Done FunD)
-      = Step RewriteAppOver
+  progress (AppOver func param) with (progress func)
+    progress (AppOver func param) | (Done valueD) with (progress param)
+      progress (AppOver (Fun (TyParam n) body) (MkParam m)) | (Done Fun) | (Done MkParam)
+        = Step (ReduceFuncAppOverP)
+      progress (AppOver (Fun (TyParam n) body) (Override m)) | (Done Fun) | (Done Override)
+        = Step ReduceFuncAppOverO
 
-    progress (AppOver func var) | (Step step)
-      = Step (SimplifyAppOver step)
+      progress (AppOver func param) | (Done valueD) | (Step step)
+        = Step (SimplifyAppOverArg valueD step)
+
+    progress (AppOver func param) | (Step step)
+      = Step (SimplifyAppOverFunc step)
 
   progress (MkNat n) = Done MkNat
+
+  progress (ToNat p) with (progress p)
+    progress (ToNat (MkParam n)) | (Done MkParam)
+      = Step ReduceToNatP
+    progress (ToNat (Override m)) | (Done Override)
+      = Step ReduceToNatO
+    progress (ToNat p) | (Step step)
+      = Step (SimplifyToNat step)
+
+  progress (MkParam n) = Done MkParam
+
+  progress (Override n) = Done Override
 
 namespace Evaluation
 
@@ -514,19 +559,19 @@ namespace Examples
   export
   example0 : AST
   example0
-    = App (Fun "x" (TyNat)
-               ((Var "x")))
-          (MkNat 2)
+    = App (Fun "x" (TyParam 3)
+               (ToNat (Var "x")))
+          (MkParam 2) -- Fails
 
   export
   example1 : AST
   example1
-    = AppDef (FunD "x" (TyNat) (MkNat 4)
-                   (Var "x"))
+    = AppDef (Fun "x" (TyParam 3)
+                  (ToNat (Var "x")))
 
   export
   example2 : AST
   example2
-    = App (FunD "x" TyNat (MkNat 4)
-                (Var "x"))
-                (MkNat 2)
+    = AppOver (Fun "x" (TyParam 3)
+                  (ToNat (Var "x")))
+              (MkParam 2)
