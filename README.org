@@ -3,6 +3,9 @@
 A little cage in which I explore various extensions to the STLC with things that interest me.
 Some of these little calculi are me looking at features in isolation for bigger projects.
 
+This is my little project that I don't mind sharing with the world, however, *I will not accept PRs*.
+This repository is rough and ready.
+
 All calculi are De Bruijn indexed and intrinsically typed.
 I try to present them with small step operational semantics but mwah.
 
