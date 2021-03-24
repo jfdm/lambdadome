@@ -28,6 +28,13 @@ namespace Terms
        -> (arg  : Term ctxt         p)
                -> Term ctxt           r
 
+    AppDef : (func : Term ctxt (TyFunc (TyParam n) r))
+                  -> Term ctxt                     r
+
+    AppOver : (fun : Term ctxt (TyFunc (TyParam n) r))
+           -> (arg : Term ctxt         (TyParam m))
+                  -> Term ctxt                     r
+
     MkNat : (n : Nat)
               -> Term ctxt TyNat
 
@@ -37,12 +44,8 @@ namespace Terms
     MkParam : (n : Nat)
            -> Term ctxt (TyParam n)
 
-    Override : Term ctxt TyNat
-            -> Term ctxt (TyParam n)
 
   namespace Undecorated
-
-
 
     public export
     data AST = Var String
@@ -52,7 +55,7 @@ namespace Terms
              | ToNat AST
              | MkParam Nat
              | AppDef AST
-             | Override AST
+             | AppOver AST AST
 
 namespace Types
 
@@ -164,24 +167,15 @@ namespace TypeChecking
     check env (App x y) with (check env x)
       check env (App x y) | Nothing
         = Nothing
-      check env (App x y) | (Just (MkDPair (TyFunc p r) f)) with (y) -- Special rule for override
-        check env (App x y) | (Just (MkDPair (TyFunc (TyParam k) r) f)) | (Override z) with (check env z)
-          check env (App x y) | (Just (MkDPair (TyFunc (TyParam k) r) f)) | (Override z) | Nothing
-            = Nothing
-          check env (App x y) | (Just (MkDPair (TyFunc (TyParam k) r) f)) | (Override z) | (Just (MkDPair TyNat snd))
-            = Just (_ ** App f (Override snd))
-          check env (App x y) | (Just (MkDPair (TyFunc (TyParam k) r) f)) | (Override z) | (Just (MkDPair _ snd))
-            = Nothing
 
-        check env (App x y) | (Just (MkDPair (TyFunc p r) f)) | y' with (check env y')
-          check env (App x y) | (Just (MkDPair (TyFunc p r) f)) | y' | Nothing
+      check env (App x y) | (Just (MkDPair (TyFunc paramTy returnTy) f)) with (check env y)
+        check env (App x y) | (Just (MkDPair (TyFunc paramTy returnTy) f)) | Nothing
+          = Nothing
+        check env (App x y) | (Just (MkDPair (TyFunc paramTy returnTy) f)) | (Just (MkDPair paramTy' a)) with (decEq paramTy paramTy')
+          check env (App x y) | (Just (MkDPair (TyFunc paramTy' returnTy) f)) | (Just (MkDPair paramTy' a)) | (Yes Refl)
+            = Just (_ ** App f a)
+          check env (App x y) | (Just (MkDPair (TyFunc paramTy returnTy) f)) | (Just (MkDPair paramTy' a)) | (No contra)
             = Nothing
-          check env (App x y) | (Just (MkDPair (TyFunc p r) f)) | y' | (Just (MkDPair fst a)) with (decEq p fst)
-            check env (App x y) | (Just (MkDPair (TyFunc fst r) f)) | y' | (Just (MkDPair fst a)) | (Yes Refl)
-              = Just (_ ** App f a)
-            check env (App x y) | (Just (MkDPair (TyFunc p r) f)) | y' | (Just (MkDPair fst a)) | (No contra)
-              = Nothing
-
       check env (App x y) | (Just (MkDPair _ snd))
         = Nothing
 
@@ -201,25 +195,37 @@ namespace TypeChecking
       check env (AppDef f) | Nothing
         = Nothing
       check env (AppDef f) | (Just (MkDPair (TyFunc (TyParam k) y) snd))
-        = Just (_ ** App snd (MkParam k))
+        = Just (_ ** AppDef snd)
+
+        -- Just (_ ** App snd (MkParam k))
 
       check env (AppDef f) | (Just (MkDPair (TyFunc _ y) snd))
         = Nothing
       check env (AppDef f) | (Just (MkDPair _ snd))
         = Nothing
 
+    check env (AppOver forig aorig) with (check env forig)
+      check env (AppOver forig aorig) | Nothing
+        = Nothing
+      check env (AppOver forig aorig) | (Just (MkDPair (TyFunc (TyParam n) r) f)) with (check env aorig)
+        check env (AppOver forig aorig) | (Just (MkDPair (TyFunc (TyParam n) r) f)) | Nothing
+          = Nothing
+        check env (AppOver forig aorig) | (Just (MkDPair (TyFunc (TyParam n) r) f)) | (Just (MkDPair (TyParam m) a))
+          = Just (_ ** AppOver f a)
+        check env (AppOver forig aorig) | (Just (MkDPair (TyFunc (TyParam n) r) f)) | (Just (MkDPair _ _))
+          = Nothing
+
+      check env (AppOver forig aorig) | (Just (MkDPair _ _))
+        = Nothing
+
     check env (MkParam n)
       = Just (_ ** MkParam n)
-
-    -- Synths at application not checks...
-    check env (Override x)
-      = Nothing
 
 example0 : AST
 example0
   = App (Fun "x" (TyParam 3)
              (ToNat (Var "x")))
-        (Override (MkNat 2))
+        ((MkParam 2))
 
 example1 : AST
 example1
