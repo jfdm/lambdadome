@@ -13,6 +13,7 @@ import Data.Fuel
 import Toolkit.Decidable.Equality.Indexed
 
 import Lambda.Common
+import Lambda.Classic.Common
 
 %default total
 
@@ -129,212 +130,140 @@ namespace Types
         = No (fdP contra)
 
 namespace TypeChecking
-  namespace Env
 
-    data Item : Ty -> Type where
-      MkItem : (name : String)
-            -> (ty   : Ty)
-                    -> Item ty
+  export
+  check : (env  : Env Ty ctxt)
+       -> (ast  : AST)
+               -> Maybe (type ** Term ctxt type)
+  check env (Var x)
+    = do (type ** prf) <- getType x env
+         pure (type ** Var prf)
 
-    export
-    data Env : List Ty -> Type
-      where
-        Empty : Env Nil
-        Cons : Item ty -> Env rest -> Env (ty :: rest)
+  check env (Fun name type body) with (check (extend name type env) body)
+    check env (Fun name type body) | Nothing
+      = Nothing
+    check env (Fun name type body) | (Just (MkDPair fst snd))
+      = Just (_ ** Fun type snd)
 
-    export
-    empty : Env Nil
-    empty = Empty
-
-    export
-    extend : (name : String)
-          -> (type : Ty)
-          -> (env  : Env rest)
-                  -> Env (type::rest)
-    extend name type env = Cons (MkItem name type) env
-
-    export
-    getType : String -> Env tys -> Maybe (type ** Elem type tys)
-    getType x Empty = Nothing
-    getType x (Cons (MkItem y ty) z) with (decEq x y)
-      getType y (Cons (MkItem y ty) z) | (Yes Refl) = Just (ty ** Here)
-      getType x (Cons (MkItem y ty) z) | (No contra) with (getType x z)
-        getType x (Cons (MkItem y ty) z) | (No contra) | Nothing = Nothing
-        getType x (Cons (MkItem y ty) z) | (No contra) | (Just (MkDPair fst orf)) = Just (fst ** There orf)
-
-
-  namespace Checker
-
-    export
-    check : (env  : Env ctxt)
-         -> (ast  : AST)
-                 -> Maybe (type ** Term ctxt type)
-    check env (Var x)
-      = do (type ** prf) <- getType x env
-           pure (type ** Var prf)
-
-    check env (Fun name type body) with (check (extend name type env) body)
-      check env (Fun name type body) | Nothing
+  check env (FunD name type def body) with (check env def)
+    check env (FunD name type def body) | Nothing
+      = Nothing
+    check env (FunD name type def body) | (Just (MkDPair fst def')) with (decEq type fst)
+      check env (FunD name fst def body) | (Just (MkDPair fst def')) | (Yes Refl) with (check (extend name fst env) body)
+        check env (FunD name fst def body) | (Just (MkDPair fst def')) | (Yes Refl) | Nothing
+          = Nothing
+        check env (FunD name fst def body) | (Just (MkDPair fst def')) | (Yes Refl) | (Just (MkDPair x body'))
+          = Just (_ ** FunD fst def' body')
+      check env (FunD name type def body) | (Just (MkDPair fst def')) | (No contra)
         = Nothing
-      check env (Fun name type body) | (Just (MkDPair fst snd))
-        = Just (_ ** Fun type snd)
 
-    check env (FunD name type def body) with (check env def)
-      check env (FunD name type def body) | Nothing
+  check env (App x y) with (check env x)
+    check env (App x y) | Nothing
+      = Nothing
+
+    check env (App x y) | (Just (MkDPair (TyFunc paramTy returnTy) f)) with (check env y)
+      check env (App x y) | (Just (MkDPair (TyFunc paramTy returnTy) f)) | Nothing
         = Nothing
-      check env (FunD name type def body) | (Just (MkDPair fst def')) with (decEq type fst)
-        check env (FunD name fst def body) | (Just (MkDPair fst def')) | (Yes Refl) with (check (extend name fst env) body)
-          check env (FunD name fst def body) | (Just (MkDPair fst def')) | (Yes Refl) | Nothing
-            = Nothing
-          check env (FunD name fst def body) | (Just (MkDPair fst def')) | (Yes Refl) | (Just (MkDPair x body'))
-            = Just (_ ** FunD fst def' body')
-        check env (FunD name type def body) | (Just (MkDPair fst def')) | (No contra)
+      check env (App x y) | (Just (MkDPair (TyFunc paramTy returnTy) f)) | (Just (MkDPair paramTy' a)) with (decEq paramTy paramTy')
+        check env (App x y) | (Just (MkDPair (TyFunc paramTy' returnTy) f)) | (Just (MkDPair paramTy' a)) | (Yes Refl)
+          = Just (_ ** App f a)
+        check env (App x y) | (Just (MkDPair (TyFunc paramTy returnTy) f)) | (Just (MkDPair paramTy' a)) | (No contra)
           = Nothing
 
-    check env (App x y) with (check env x)
-      check env (App x y) | Nothing
+    check env (App x y) | (Just (MkDPair (TyFuncD paramTy returnTy) f)) with (check env y)
+      check env (App x y) | (Just (MkDPair (TyFuncD paramTy returnTy) f)) | Nothing
         = Nothing
-
-      check env (App x y) | (Just (MkDPair (TyFunc paramTy returnTy) f)) with (check env y)
-        check env (App x y) | (Just (MkDPair (TyFunc paramTy returnTy) f)) | Nothing
+      check env (App x y) | (Just (MkDPair (TyFuncD paramTy returnTy) f)) | (Just (MkDPair paramTy' a)) with (decEq paramTy paramTy')
+        check env (App x y) | (Just (MkDPair (TyFuncD paramTy' returnTy) f)) | (Just (MkDPair paramTy' a)) | (Yes Refl)
+          = Just (_ ** AppOver f a)
+        check env (App x y) | (Just (MkDPair (TyFuncD paramTy returnTy) f)) | (Just (MkDPair paramTy' a)) | (No contra)
           = Nothing
-        check env (App x y) | (Just (MkDPair (TyFunc paramTy returnTy) f)) | (Just (MkDPair paramTy' a)) with (decEq paramTy paramTy')
-          check env (App x y) | (Just (MkDPair (TyFunc paramTy' returnTy) f)) | (Just (MkDPair paramTy' a)) | (Yes Refl)
-            = Just (_ ** App f a)
-          check env (App x y) | (Just (MkDPair (TyFunc paramTy returnTy) f)) | (Just (MkDPair paramTy' a)) | (No contra)
-            = Nothing
 
-      check env (App x y) | (Just (MkDPair (TyFuncD paramTy returnTy) f)) with (check env y)
-        check env (App x y) | (Just (MkDPair (TyFuncD paramTy returnTy) f)) | Nothing
-          = Nothing
-        check env (App x y) | (Just (MkDPair (TyFuncD paramTy returnTy) f)) | (Just (MkDPair paramTy' a)) with (decEq paramTy paramTy')
-          check env (App x y) | (Just (MkDPair (TyFuncD paramTy' returnTy) f)) | (Just (MkDPair paramTy' a)) | (Yes Refl)
-            = Just (_ ** AppOver f a)
-          check env (App x y) | (Just (MkDPair (TyFuncD paramTy returnTy) f)) | (Just (MkDPair paramTy' a)) | (No contra)
-            = Nothing
+    check env (App x y) | (Just (MkDPair _ snd))
+      = Nothing
 
-      check env (App x y) | (Just (MkDPair _ snd))
-        = Nothing
+  check env (MkNat k)
+    = Just (_ ** MkNat k)
 
-    check env (MkNat k)
-      = Just (_ ** MkNat k)
+  -- 'Typing Rule'/'Rewrite' to insert
+  check env (AppDef f) with (check env f)
+    check env (AppDef f) | Nothing
+      = Nothing
+    check env (AppDef f) | (Just (MkDPair (TyFuncD k y) snd))
+      = Just (_ ** AppDef snd)
 
-    -- 'Typing Rule'/'Rewrite' to insert
-    check env (AppDef f) with (check env f)
-      check env (AppDef f) | Nothing
-        = Nothing
-      check env (AppDef f) | (Just (MkDPair (TyFuncD k y) snd))
-        = Just (_ ** AppDef snd)
-
-      check env (AppDef f) | (Just (MkDPair (TyFunc _ y) snd))
-        = Nothing
-      check env (AppDef f) | (Just (MkDPair _ snd))
-        = Nothing
+    check env (AppDef f) | (Just (MkDPair (TyFunc _ y) snd))
+      = Nothing
+    check env (AppDef f) | (Just (MkDPair _ snd))
+      = Nothing
 
 namespace Renaming
-
-  public export
-  weaken : (func : Contains old type
-                -> Contains new type)
-        -> (Contains (old += type') type
-         -> Contains (new += type') type)
-
-  weaken func Here = Here
-  weaken func (There rest) = There (func rest)
-
-  public export
-  rename : (f : {type  : Ty} -> Contains old type
-                             -> Contains new type)
-        -> ({type : Ty} -> Term old type
-                        -> Term new type)
-
   -- Term
-  rename f (Var idx)
-    = Var (f idx)
 
-  rename f (Fun ty body)
-    = Fun ty (rename (weaken f) body)
+  export
+  Rename Ty Term where
+    var = Var
 
-  rename f (App func param)
-    = App (rename f func) (rename f param)
+    rename f (Var idx)
+      = Var (f idx)
 
-  rename f (FunD ty def body)
-    = FunD ty (rename         f  def)
-              (rename (weaken f) body)
+    rename f (Fun ty body)
+      = Fun ty (rename (weaken f) body)
 
-  rename f (AppDef func)
-    = AppDef (rename f func)
+    rename f (App func param)
+      = App (rename f func) (rename f param)
 
-  rename f (AppOver func param)
-    = AppOver (rename f func) (rename f param)
+    rename f (FunD ty def body)
+      = FunD ty (rename         f  def)
+                (rename (weaken f) body)
 
-  rename f (MkNat n)
-    = MkNat n
+    rename f (AppDef func)
+      = AppDef (rename f func)
 
-namespace Substitution
-  public export
-  weakens : (f : {type  : Ty}
-                       -> Contains old type
-                       -> Term     new type)
-         -> ({type  : Ty}
-                   -> Contains (old += type') type
-                   -> Term     (new += type') type)
-  weakens f Here = Var Here
-  weakens f (There rest) = rename There (f rest)
+    rename f (AppOver func param)
+      = AppOver (rename f func) (rename f param)
 
-  -- general substitute
-  namespace General
-    public export
-    subst : (f : {type  : Ty}
-                       -> Contains old type
-                       -> Term     new type)
-         -> ({type  : Ty}
-                   -> Term old type
-                   -> Term new type)
-
-    -- Term
-    subst f (Var idx) = f idx
-
-    subst f (Fun type body)
-      = Fun type
-            (subst (weakens f) body)
-
-    subst f (App func var)
-      = App (subst f func) (subst f var)
-
-    subst f (FunD type def body)
-      = FunD type
-             (subst          f  def)
-             (subst (weakens f) body)
-
-    subst f (AppDef func)
-      = AppDef (subst f func)
-
-    subst f (MkNat n)
+    rename f (MkNat n)
       = MkNat n
 
-    subst f (AppOver func var)
-      = AppOver (subst f func) (subst f var)
 
+namespace Substitution
 
-  namespace Single
-    public export
-    apply : {typeA  : Ty}
-         -> (this   : Term      ctxt    typeB)
-         -> (idx    : Contains (ctxt += typeB) typeA)
-                   -> Term      ctxt           typeA
-    apply this Here = this
-    apply this (There rest) = Var rest
+  subst : {old, new : List Ty}
+       -> (f : {type  : Ty}
+                     -> Contains old type
+                     -> Term     new type)
+       -> ({type  : Ty}
+                 -> Term old type
+                 -> Term new type)
 
-    public export
-    subst : {typeA         : Ty}
-         -> {typeB         : Ty}
-         -> (this          : Term  ctxt           typeB)
-         -> (inThis        : Term (ctxt += typeB) typeA)
-                          -> Term  ctxt           typeA
-    subst {ctxt} {typeA} {typeB} this inThis
-      = General.subst (apply this) inThis
+  -- Term
+  subst f (Var idx) = f idx
 
+  subst f (Fun type body)
+    = Fun type
+          (subst (weakens f) body)
+
+  subst f (App func var)
+    = App (subst f func) (subst f var)
+
+  subst f (FunD type def body)
+    = FunD type
+           (subst          f  def)
+           (subst (weakens f) body)
+
+  subst f (AppDef func)
+    = AppDef (subst f func)
+
+  subst f (MkNat n)
+    = MkNat n
+
+  subst f (AppOver func var)
+    = AppOver (subst f func) (subst f var)
+
+  export
+  Substitute Ty Term where
+    subst = Default.Substitution.subst
 
 namespace Values
 

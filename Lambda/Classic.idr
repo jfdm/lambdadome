@@ -9,6 +9,7 @@ import Data.Fuel
 import Toolkit.Decidable.Equality.Indexed
 
 import Lambda.Common
+import Lambda.Classic.Common
 
 %default total
 
@@ -41,22 +42,8 @@ namespace Terms
          -> (value : STLC ctxt         paramTy)
                   -> STLC ctxt                 bodyTy
 
-namespace Renaming
-
-  public export
-  weaken : (func : Contains old type
-                -> Contains new type)
-        -> (Contains (old += type') type
-         -> Contains (new += type') type)
-
-  weaken func Here = Here
-  weaken func (There rest) = There (func rest)
-
-  public export
-  rename : (f : {type  : Ty} -> Contains old type
-                             -> Contains new type)
-        -> ({type : Ty} -> STLC old type
-                        -> STLC new type)
+Rename Ty STLC where
+  var = Var
 
   -- STLC
   rename f (Var idx) = Var (f idx)
@@ -68,56 +55,16 @@ namespace Renaming
     = App (rename f func) (rename f param)
 
 
-namespace Substitution
-  public export
-  weakens : (f : {type  : Ty}
-                       -> Contains old type
-                       -> STLC     new type)
-         -> ({type  : Ty}
-                   -> Contains (old += type') type
-                   -> STLC     (new += type') type)
-  weakens f Here = Var Here
-  weakens f (There rest) = rename There (f rest)
+Substitute Ty STLC where
+  subst f (Var idx) = f idx
 
-  -- general substitute
-  namespace General
-    public export
-    subst : (f : {type  : Ty}
-                       -> Contains old type
-                       -> STLC     new type)
-         -> ({type  : Ty}
-                   -> STLC old type
-                   -> STLC new type)
-
-    -- STLC
-    subst f (Var idx) = f idx
-
-    subst f (Func type body)
-      = Func type
-             (subst (weakens f) body)
+  subst f (Func type body)
+    = Func type
+           (subst (weakens f) body)
 
 
-    subst f (App func var)
-      = App (subst f func) (subst f var)
-
-  namespace Single
-    public export
-    apply : {typeA  : Ty}
-         -> (this   : STLC      ctxt    typeB)
-         -> (idx    : Contains (ctxt += typeB) typeA)
-                   -> STLC      ctxt           typeA
-    apply this Here = this
-    apply this (There rest) = Var rest
-
-    public export
-    subst : {typeA         : Ty}
-         -> {typeB         : Ty}
-         -> (this          : STLC  ctxt           typeB)
-         -> (inThis        : STLC (ctxt += typeB) typeA)
-                          -> STLC  ctxt           typeA
-    subst {ctxt} {typeA} {typeB} this inThis
-      = General.subst (apply this) inThis
-
+  subst f (App func var)
+    = App (subst f func) (subst f var)
 
 namespace Values
 
