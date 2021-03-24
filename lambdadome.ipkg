@@ -39,6 +39,9 @@ modules =
         -- [ The Classic Lambdas ]
 
         , Lambda.Classic
+        , Lambda.Classic.Bool
+        , Lambda.Classic.Default
+        , Lambda.Classic.Vect
 
         -- [ The NewWave ]
 

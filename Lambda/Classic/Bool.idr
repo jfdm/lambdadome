@@ -13,7 +13,7 @@
 ||| with Idris2 totality checker that causes it to slow down when
 ||| dealing with mutually defined terms.
 |||
-module Lambda.Classic
+module Lambda.Classic.Bool
 
 import Data.DPair
 import Data.List.Elem

@@ -1,0 +1,35 @@
+#+TITLE: Lambdadome: My explorations in Lambda Calculi.
+
+A little cage in which I explore various extensions to the STLC with things that interest me.
+Some of these little calculi are me looking at features in isolation for bigger projects.
+
+All calculi are De Bruijn indexed and intrinsically typed.
+I try to present them with small step operational semantics but mwah.
+
+There are two styles of calculi here:
+
++ Classic :: A classic construction as commonly seen in dependently typed programmes.
+             I make one adjustment in that functions are explicitly annotated with their argument type.
+
++ NewWave :: A style of construction I am pioneering in which types are presented as terms.
+             Types are still stratified from values, and this is *not* dependently-typed constructions, more that I want to treat types as terms.
+
+At somepoint I will add /decidable/ type-checking procedures to /show/ that type-checking is decidable.
+By that I mean I will go from an 'un-decorated' abstract syntax tree and construct intrinsically type terms from it.
+I do not intend to use `Dec` (or my personal favourite of `DecInfo`) but rather just use `Either`.
+At somepoint I will use `Dec`/`DecInfo`.
+
+I will leave holes for some `DecEq` instances as they *do* take time to write.
+
+* Depends
+
+  + Idris2
+
+At somepoint I will be making more detailed literate notes using Juptyer-Book.
+When I do, I shall depended on that and a few extra utilities.
+
+  + Jupyter-book
+
+At somepoint I will add benchmarking of things, for that I intend to use hyperfine.
+
+  + Hyperfine
