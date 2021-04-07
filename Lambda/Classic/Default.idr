@@ -66,136 +66,6 @@ namespace Terms
              | MkNat Nat
              | AppDef AST
 
-namespace Types
-
-  nNotF : TyNat === TyFunc p r -> Void
-  nNotF Refl impossible
-
-  nNotFd : TyNat === TyFuncD p r -> Void
-  nNotFd Refl impossible
-
-  fP : (contra : a === b -> Void)
-    -> TyFunc a y === TyFunc b w
-    -> Void
-  fP contra Refl = contra Refl
-
-  fR : (contra : y === w -> Void)
-    -> TyFunc a y === TyFunc a w
-    -> Void
-  fR contra Refl = contra Refl
-
-  fdP : (contra : a === b -> Void)
-     -> TyFuncD a y === TyFuncD b w
-     -> Void
-  fdP contra Refl = contra Refl
-
-  fdR : (contra : y === w -> Void)
-     -> TyFuncD a y === TyFuncD a w
-     -> Void
-  fdR contra Refl = contra Refl
-
-  fNotD : TyFunc x y === TyFuncD a b
-       -> Void
-  fNotD Refl impossible
-
-  export
-  DecEq Ty where
-    decEq TyNat TyNat = Yes Refl
-    decEq TyNat (TyFunc  x y) = No nNotF
-    decEq TyNat (TyFuncD x y) = No nNotFd
-
-    decEq (TyFunc x y) (TyFuncD a b) = No fNotD
-
-    decEq (TyFunc x y) TyNat = No (negEqSym nNotF)
-
-    decEq (TyFunc x y) (TyFunc z w) with (decEq x z)
-      decEq (TyFunc x y) (TyFunc x w) | (Yes Refl) with (decEq y w)
-        decEq (TyFunc x w) (TyFunc x w) | (Yes Refl) | (Yes Refl)
-          = Yes Refl
-        decEq (TyFunc x y) (TyFunc x w) | (Yes Refl) | (No contra)
-          = No (fR contra)
-      decEq (TyFunc x y) (TyFunc z w) | (No contra)
-        = No (fP contra)
-
-    decEq (TyFuncD x y) TyNat = No (negEqSym nNotFd)
-    decEq (TyFuncD x y) (TyFunc a b) = No (negEqSym fNotD)
-
-    decEq (TyFuncD x y) (TyFuncD z w) with (decEq x z)
-      decEq (TyFuncD x y) (TyFuncD x w) | (Yes Refl) with (decEq y w)
-        decEq (TyFuncD x w) (TyFuncD x w) | (Yes Refl) | (Yes Refl)
-          = Yes Refl
-        decEq (TyFuncD x y) (TyFuncD x w) | (Yes Refl) | (No contra)
-          = No (fdR contra)
-      decEq (TyFuncD x y) (TyFuncD z w) | (No contra)
-        = No (fdP contra)
-
-namespace TypeChecking
-
-  export
-  check : (env  : Env Ty ctxt)
-       -> (ast  : AST)
-               -> Maybe (type ** Term ctxt type)
-  check env (Var x)
-    = do (type ** prf) <- getType x env
-         pure (type ** Var prf)
-
-  check env (Fun name type body) with (check (extend name type env) body)
-    check env (Fun name type body) | Nothing
-      = Nothing
-    check env (Fun name type body) | (Just (MkDPair fst snd))
-      = Just (_ ** Fun type snd)
-
-  check env (FunD name type def body) with (check env def)
-    check env (FunD name type def body) | Nothing
-      = Nothing
-    check env (FunD name type def body) | (Just (MkDPair fst def')) with (decEq type fst)
-      check env (FunD name fst def body) | (Just (MkDPair fst def')) | (Yes Refl) with (check (extend name fst env) body)
-        check env (FunD name fst def body) | (Just (MkDPair fst def')) | (Yes Refl) | Nothing
-          = Nothing
-        check env (FunD name fst def body) | (Just (MkDPair fst def')) | (Yes Refl) | (Just (MkDPair x body'))
-          = Just (_ ** FunD fst def' body')
-      check env (FunD name type def body) | (Just (MkDPair fst def')) | (No contra)
-        = Nothing
-
-  check env (App x y) with (check env x)
-    check env (App x y) | Nothing
-      = Nothing
-
-    check env (App x y) | (Just (MkDPair (TyFunc paramTy returnTy) f)) with (check env y)
-      check env (App x y) | (Just (MkDPair (TyFunc paramTy returnTy) f)) | Nothing
-        = Nothing
-      check env (App x y) | (Just (MkDPair (TyFunc paramTy returnTy) f)) | (Just (MkDPair paramTy' a)) with (decEq paramTy paramTy')
-        check env (App x y) | (Just (MkDPair (TyFunc paramTy' returnTy) f)) | (Just (MkDPair paramTy' a)) | (Yes Refl)
-          = Just (_ ** App f a)
-        check env (App x y) | (Just (MkDPair (TyFunc paramTy returnTy) f)) | (Just (MkDPair paramTy' a)) | (No contra)
-          = Nothing
-
-    check env (App x y) | (Just (MkDPair (TyFuncD paramTy returnTy) f)) with (check env y)
-      check env (App x y) | (Just (MkDPair (TyFuncD paramTy returnTy) f)) | Nothing
-        = Nothing
-      check env (App x y) | (Just (MkDPair (TyFuncD paramTy returnTy) f)) | (Just (MkDPair paramTy' a)) with (decEq paramTy paramTy')
-        check env (App x y) | (Just (MkDPair (TyFuncD paramTy' returnTy) f)) | (Just (MkDPair paramTy' a)) | (Yes Refl)
-          = Just (_ ** AppOver f a)
-        check env (App x y) | (Just (MkDPair (TyFuncD paramTy returnTy) f)) | (Just (MkDPair paramTy' a)) | (No contra)
-          = Nothing
-
-    check env (App x y) | (Just (MkDPair _ snd))
-      = Nothing
-
-  check env (MkNat k)
-    = Just (_ ** MkNat k)
-
-  -- 'Typing Rule'/'Rewrite' to insert
-  check env (AppDef f) with (check env f)
-    check env (AppDef f) | Nothing
-      = Nothing
-    check env (AppDef f) | (Just (MkDPair (TyFuncD k y) snd))
-      = Just (_ ** AppDef snd)
-
-    check env (AppDef f) | (Just (MkDPair (TyFunc _ y) snd))
-      = Nothing
-    check env (AppDef f) | (Just (MkDPair _ snd))
-      = Nothing
 
 namespace Renaming
   -- Term
@@ -417,6 +287,7 @@ run this with (compute forever this)
     = Just (Element term steps)
   run this | (RunEval steps OOF) = Nothing
 
+public export
 data Result : Type
   where
     Error : Result
@@ -425,6 +296,137 @@ data Result : Type
          -> (  that : Term Nil type)
          -> (0 prf  : Reduces this that)
                    -> Result
+
+namespace Types
+
+  nNotF : TyNat === TyFunc p r -> Void
+  nNotF Refl impossible
+
+  nNotFd : TyNat === TyFuncD p r -> Void
+  nNotFd Refl impossible
+
+  fP : (contra : a === b -> Void)
+    -> TyFunc a y === TyFunc b w
+    -> Void
+  fP contra Refl = contra Refl
+
+  fR : (contra : y === w -> Void)
+    -> TyFunc a y === TyFunc a w
+    -> Void
+  fR contra Refl = contra Refl
+
+  fdP : (contra : a === b -> Void)
+     -> TyFuncD a y === TyFuncD b w
+     -> Void
+  fdP contra Refl = contra Refl
+
+  fdR : (contra : y === w -> Void)
+     -> TyFuncD a y === TyFuncD a w
+     -> Void
+  fdR contra Refl = contra Refl
+
+  fNotD : TyFunc x y === TyFuncD a b
+       -> Void
+  fNotD Refl impossible
+
+  export
+  DecEq Ty where
+    decEq TyNat TyNat = Yes Refl
+    decEq TyNat (TyFunc  x y) = No nNotF
+    decEq TyNat (TyFuncD x y) = No nNotFd
+
+    decEq (TyFunc x y) (TyFuncD a b) = No fNotD
+
+    decEq (TyFunc x y) TyNat = No (negEqSym nNotF)
+
+    decEq (TyFunc x y) (TyFunc z w) with (decEq x z)
+      decEq (TyFunc x y) (TyFunc x w) | (Yes Refl) with (decEq y w)
+        decEq (TyFunc x w) (TyFunc x w) | (Yes Refl) | (Yes Refl)
+          = Yes Refl
+        decEq (TyFunc x y) (TyFunc x w) | (Yes Refl) | (No contra)
+          = No (fR contra)
+      decEq (TyFunc x y) (TyFunc z w) | (No contra)
+        = No (fP contra)
+
+    decEq (TyFuncD x y) TyNat = No (negEqSym nNotFd)
+    decEq (TyFuncD x y) (TyFunc a b) = No (negEqSym fNotD)
+
+    decEq (TyFuncD x y) (TyFuncD z w) with (decEq x z)
+      decEq (TyFuncD x y) (TyFuncD x w) | (Yes Refl) with (decEq y w)
+        decEq (TyFuncD x w) (TyFuncD x w) | (Yes Refl) | (Yes Refl)
+          = Yes Refl
+        decEq (TyFuncD x y) (TyFuncD x w) | (Yes Refl) | (No contra)
+          = No (fdR contra)
+      decEq (TyFuncD x y) (TyFuncD z w) | (No contra)
+        = No (fdP contra)
+
+namespace TypeChecking
+
+  export
+  check : (env  : Env Ty ctxt)
+       -> (ast  : AST)
+               -> Maybe (type ** Term ctxt type)
+  check env (Var x)
+    = do (type ** prf) <- getType x env
+         pure (type ** Var prf)
+
+  check env (Fun name type body) with (check (extend name type env) body)
+    check env (Fun name type body) | Nothing
+      = Nothing
+    check env (Fun name type body) | (Just (MkDPair fst snd))
+      = Just (_ ** Fun type snd)
+
+  check env (FunD name type def body) with (check env def)
+    check env (FunD name type def body) | Nothing
+      = Nothing
+    check env (FunD name type def body) | (Just (MkDPair fst def')) with (decEq type fst)
+      check env (FunD name fst def body) | (Just (MkDPair fst def')) | (Yes Refl) with (check (extend name fst env) body)
+        check env (FunD name fst def body) | (Just (MkDPair fst def')) | (Yes Refl) | Nothing
+          = Nothing
+        check env (FunD name fst def body) | (Just (MkDPair fst def')) | (Yes Refl) | (Just (MkDPair x body'))
+          = Just (_ ** FunD fst def' body')
+      check env (FunD name type def body) | (Just (MkDPair fst def')) | (No contra)
+        = Nothing
+
+  check env (App x y) with (check env x)
+    check env (App x y) | Nothing
+      = Nothing
+
+    check env (App x y) | (Just (MkDPair (TyFunc paramTy returnTy) f)) with (check env y)
+      check env (App x y) | (Just (MkDPair (TyFunc paramTy returnTy) f)) | Nothing
+        = Nothing
+      check env (App x y) | (Just (MkDPair (TyFunc paramTy returnTy) f)) | (Just (MkDPair paramTy' a)) with (decEq paramTy paramTy')
+        check env (App x y) | (Just (MkDPair (TyFunc paramTy' returnTy) f)) | (Just (MkDPair paramTy' a)) | (Yes Refl)
+          = Just (_ ** App f a)
+        check env (App x y) | (Just (MkDPair (TyFunc paramTy returnTy) f)) | (Just (MkDPair paramTy' a)) | (No contra)
+          = Nothing
+
+    check env (App x y) | (Just (MkDPair (TyFuncD paramTy returnTy) f)) with (check env y)
+      check env (App x y) | (Just (MkDPair (TyFuncD paramTy returnTy) f)) | Nothing
+        = Nothing
+      check env (App x y) | (Just (MkDPair (TyFuncD paramTy returnTy) f)) | (Just (MkDPair paramTy' a)) with (decEq paramTy paramTy')
+        check env (App x y) | (Just (MkDPair (TyFuncD paramTy' returnTy) f)) | (Just (MkDPair paramTy' a)) | (Yes Refl)
+          = Just (_ ** AppOver f a)
+        check env (App x y) | (Just (MkDPair (TyFuncD paramTy returnTy) f)) | (Just (MkDPair paramTy' a)) | (No contra)
+          = Nothing
+
+    check env (App x y) | (Just (MkDPair _ snd))
+      = Nothing
+
+  check env (MkNat k)
+    = Just (_ ** MkNat k)
+
+  -- 'Typing Rule'/'Rewrite' to insert
+  check env (AppDef f) with (check env f)
+    check env (AppDef f) | Nothing
+      = Nothing
+    check env (AppDef f) | (Just (MkDPair (TyFuncD k y) snd))
+      = Just (_ ** AppDef snd)
+
+    check env (AppDef f) | (Just (MkDPair (TyFunc _ y) snd))
+      = Nothing
+    check env (AppDef f) | (Just (MkDPair _ snd))
+      = Nothing
 
 export
 covering
