@@ -49,7 +49,8 @@ namespace Substitution
 
   namespace General
     public export
-    interface Rename type term => Substitute (type : Type) (term : List type -> type -> Type) | term where
+    interface Rename type term
+           => Substitute (type : Type) (term : List type -> type -> Type) | term where
 
       subst : {old, new : List type}
            -> (f : {ty  : type}

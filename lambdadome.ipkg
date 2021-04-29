@@ -39,11 +39,15 @@ modules =
         -- [ The Classic Lambdas ]
 
         , Lambda.Classic
+        , Lambda.Classic.Nats
         , Lambda.Classic.Bool
+
         , Lambda.Classic.Default
         , Lambda.Classic.Default.Param
+
         , Lambda.Classic.Vect
 
+        , Lambda.Classic.Interp
         -- [ The NewWave ]
 
         , Lambda.NewWave

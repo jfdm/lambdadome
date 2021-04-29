@@ -83,8 +83,8 @@ namespace KV
   indexEmpty : DecEq type
            => (t ** Index (String, type) [] (k, t))
            -> Void
-  indexEmpty (MkDPair _ Here) impossible
-  indexEmpty (MkDPair _ (There _)) impossible
+  indexEmpty (MkDPair fst snd) impossible
+
 
 
   public export
