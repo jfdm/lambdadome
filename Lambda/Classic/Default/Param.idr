@@ -242,15 +242,6 @@ namespace TypeChecking
 namespace Renaming
 
   public export
-  weaken : (func : Contains old type
-                -> Contains new type)
-        -> (Contains (old += type') type
-         -> Contains (new += type') type)
-
-  weaken func Here = Here
-  weaken func (There rest) = There (func rest)
-
-  public export
   rename : (f : {type  : Ty} -> Contains old type
                              -> Contains new type)
         -> ({type : Ty} -> Term old type

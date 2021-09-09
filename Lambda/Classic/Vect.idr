@@ -75,6 +75,7 @@ namespace Env
 namespace TypeChecking
 
   DecEq Ty where
+    decEq = ?as
 
   check : (env : Env ctxt)
        -> AST

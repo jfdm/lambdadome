@@ -6,87 +6,9 @@ import Data.List.Elem
 import Data.Nat
 import Data.DPair
 
-import Lambda.Common
+import public Lambda.Common
 
 %default total
-
-namespace Renaming
-
-  public export
-  weaken : (func : Contains old type
-                -> Contains new type)
-        -> (Contains (old += type') type
-         -> Contains (new += type') type)
-
-  weaken func Here = Here
-  weaken func (There rest) = There (func rest)
-
-  public export
-  interface Rename (type : Type) (term : List type -> type -> Type) | term where
-    rename : {old, new : List type}
-          -> (f : {ty : type} -> Contains old ty
-                              -> Contains new ty)
-          -> ({ty : type} -> term old ty
-                          -> term new ty)
-
-    var : {ty   : type}
-       -> {ctxt : List type}
-               -> Elem ty ctxt
-               -> term ctxt ty
-
-
-    weakens : {old, new : List type}
-           -> (f : {ty  : type}
-                       -> Contains old ty
-                       -> term     new ty)
-           -> ({ty,type' : type}
-                  -> Contains (old += type') ty
-                  -> term     (new += type') ty)
-    weakens f Here = var Here
-    weakens f (There rest) = rename There (f rest)
-
-namespace Substitution
-
-  namespace General
-    public export
-    interface Rename type term
-           => Substitute (type : Type) (term : List type -> type -> Type) | term where
-
-      subst : {old, new : List type}
-           -> (f : {ty  : type}
-                       -> Contains old ty
-                       -> term     new ty)
-           -> ({ty : type}
-                  -> term old ty
-                  -> term new ty)
-
-  namespace Single
-
-    apply : {type : Type}
-         -> {term : List type -> type -> Type}
-         -> Rename type term
-         => {ctxt   : List type}
-         -> {typeA  : type}
-         -> {typeB  : type}
-         -> (this   : term      ctxt    typeB)
-         -> (idx    : Contains (ctxt += typeB) typeA)
-                   -> term      ctxt           typeA
-    apply this Here = this
-    apply this (There rest) = var rest
-
-    export
-    subst : {type : Type}
-         -> {term : List type -> type -> Type}
-         -> Rename type term
-         => Substitute type term
-         => {ctxt          : List type}
-         -> {typeA         : type}
-         -> {typeB         : type}
-         -> (this          : term  ctxt           typeB)
-         -> (inThis        : term (ctxt += typeB) typeA)
-                          -> term  ctxt           typeA
-    subst {ctxt} {typeA} {typeB} this inThis
-      = subst (apply this) inThis
 
 namespace Env
   data Item : (type : Type) -> (ty : type) -> Type where

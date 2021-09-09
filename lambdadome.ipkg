@@ -47,7 +47,6 @@ modules =
 
         , Lambda.Classic.Vect
 
-        , Lambda.Classic.Interp
         -- [ The NewWave ]
 
         , Lambda.NewWave

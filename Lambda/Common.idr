@@ -9,37 +9,21 @@
 |||    dependent types easier.
 module Lambda.Common
 
+import public Decidable.Equality
+
 import Data.List.Elem
 
-import Toolkit.Data.DList
-import Toolkit.Data.DList.Elem
+import public Toolkit.Data.List.DeBruijn
+import public Toolkit.Data.DList
 
 %default total
-
--- A reverse cons operator.
-infixr 6 +=
-
-namespace List
-
-  ||| Proof that the given list (`xs`) contains the given element
-  ||| (`x`).
-  |||
-  |||
-  public export
-  Contains : List a -> a -> Type
-  Contains xs x = Elem x xs
-
-  ||| Append `x` to the head of `xs`.
-  public export
-  (+=) : List a -> a -> List a
-  (+=) xs x = x :: xs
 
 namespace DList
 
   ||| Append `x` to the head of `xs`.
   public export
-  (+=) : forall v
-       . (xs : DList a e vs)
+  (+=) : {v : a}
+      -> (xs : DList a e vs)
       -> (x  : e v)
             -> DList a e (v::vs)
   (+=) xs x = x :: xs
