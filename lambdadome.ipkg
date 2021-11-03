@@ -51,3 +51,6 @@ modules =
 
         , Lambda.NewWave
         , Lambda.NewWave.Bool
+
+        -- [ Fun ]
+        , Razor
