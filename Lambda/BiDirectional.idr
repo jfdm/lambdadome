@@ -307,7 +307,7 @@ namespace Helpers
                  -> (this   : Check.Term ctxt (Synth term) typeB)
                            -> Void
   switchFailFails {typeA} tm contra (Synth this Refl) with (Unique.synthesis tm this)
-    switchFailFails {typeA = typeB} tm contra (Synth this Refl) | Refl = contra Refl
+    switchFailFails tm contra (Synth this Refl) | Refl = contra Refl
 
 notBound : (DPair Ty (\t => Elem (name, t) ctxt) -> Void)
         -> DPair Ty (\type => Term ctxt (Var name) type)
@@ -665,4 +665,10 @@ namespace Examples
                      )
                      (TyFunc (TyProd TyNat TyNat) (TyProd TyNat TyNat))
 
+  export
+  toy : Synth.Syntax
+  toy
+    = App (Check (Fun "x"
+                      (Prim (+) (Synth (Var "x")) (N 1))) (TyFunc TyNat TyNat))
+          (N 5)
 -- [ EOF ]
